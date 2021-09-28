@@ -160,7 +160,6 @@ export VpcId="$( aws cloudformation describe-stacks --stack-name ${file%.yaml} -
 sudo yum install --assumeyes jq
 
 export InfrastructureName="$( jq --raw-output .infraID $dir/metadata.json )"
-export HostedZoneId="$( aws route53 list-hosted-zones-by-name | jq --arg name "$DomainName." --raw-output '.HostedZones | .[] | select(.Name=="\($name)") | .Id' | cut --delimiter / --field 3 )"
 
 
 ```
@@ -173,7 +172,6 @@ Creating networking and load balancing components in AWS:
 file=ocp-route53-$Publish.json
 wget https://raw.githubusercontent.com/${github_username}/${github_reponame}/${github_branch}/install/$file --directory-prefix $dir
 sed --in-place s/ClusterName_Value/"$ClusterName"/ $dir/$file
-sed --in-place s/HostedZoneId_Value/"$HostedZoneId"/ $dir/$file
 sed --in-place s/HostedZoneName_Value/"$DomainName"/ $dir/$file
 sed --in-place s/InfrastructureName_Value/"$InfrastructureName"/ $dir/$file
 sed --in-place s/Publish_Value/"$Publish"/ $dir/$file
@@ -196,12 +194,10 @@ if test $Publish = External
 then
 export ExternalApiTargetGroupArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[0].OutputValue --output text )
 export InternalApiTargetGroupArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[1].OutputValue --output text )
-export PrivateHostedZoneId=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[3].OutputValue --output text )
 export RegisterNlbIpTargetsLambdaArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[5].OutputValue --output text )
 export InternalServiceTargetGroupArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[6].OutputValue --output text )
 else
 export InternalApiTargetGroupArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[0].OutputValue --output text )
-export PrivateHostedZoneId=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[2].OutputValue --output text )
 export RegisterNlbIpTargetsLambdaArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[4].OutputValue --output text )
 export InternalServiceTargetGroupArn=$( aws cloudformation describe-stacks --stack-name ${file%.yaml} --query Stacks[].Outputs[5].OutputValue --output text )
 fi
@@ -296,7 +292,6 @@ wget https://raw.githubusercontent.com/${github_username}/${github_reponame}/${g
 sed --in-place s/InfrastructureName_Value/"$InfrastructureName"/ $dir/$file
 sed --in-place s/RhcosAmi_Value/"$RhcosAmi"/ $dir/$file
 sed --in-place s/AutoRegisterDNS_Value/"$AutoRegisterDNS"/ $dir/$file
-sed --in-place s/PrivateHostedZoneId_Value/"$PrivateHostedZoneId"/ $dir/$file
 sed --in-place s/PrivateHostedZoneName_Value/"$PrivateHostedZoneName"/ $dir/$file
 sed --in-place s/Master0Subnet_Value/"$Master0Subnet"/ $dir/$file
 sed --in-place s/Master1Subnet_Value/"$Master1Subnet"/ $dir/$file
@@ -384,23 +379,8 @@ aws cloudformation delete-stack --stack-name ocp-bootstrap-$Publish
 
 
 ```
-Creating the Ingress DNS Records:
-```bash
-export routes="$( oc get --all-namespaces -o jsonpath='{range .items[*]}{range .status.ingress[*]}{.host}{"\n"}{end}{end}' routes | cut --delimiter . --field 1 )"
-export hostname=$( oc -n openshift-ingress get service router-default -o custom-columns=:.status.loadBalancer.ingress[].hostname --no-headers )
-export CanonicalHostedZoneNameID=$( aws elb describe-load-balancers | jq -r '.LoadBalancerDescriptions[] | select(.DNSName == "'$hostname'").CanonicalHostedZoneNameID' )
-export PrivateHostedZoneId="$( aws route53 list-hosted-zones-by-name | jq --arg name "$ClusterName.$DomainName." --raw-output '.HostedZones | .[] | select(.Name=="\($name)") | .Id' | cut --delimiter / --field 3 )"
+Manually create the Ingress DNS Records in the corresponding DNS server.
 
-test $Publish = External && export PublicHostedZoneId="$( aws route53 list-hosted-zones-by-name | jq --arg name "$DomainName." --raw-output '.HostedZones | .[] | select(.Name=="\($name)") | .Id' | cut --delimiter / --field 3 )"
-
-for route in $routes
-do
-aws route53 change-resource-record-sets --hosted-zone-id "$PrivateHostedZoneId" --change-batch '{ "Changes": [ { "Action": "CREATE", "ResourceRecordSet": { "Name": "'$route'.apps.'$ClusterName.$DomainName'", "Type": "A", "AliasTarget":{ "HostedZoneId": "'$CanonicalHostedZoneNameID'", "DNSName": "'$hostname'.", "EvaluateTargetHealth": false } } } ] }'
-test $Publish = External && aws route53 change-resource-record-sets --hosted-zone-id "$PublicHostedZoneId" --change-batch '{ "Changes": [ { "Action": "CREATE", "ResourceRecordSet": { "Name": "'$route'.apps.'$ClusterName.$DomainName'", "Type": "A", "AliasTarget":{ "HostedZoneId": "'$CanonicalHostedZoneNameID'", "DNSName": "'$hostname'.", "EvaluateTargetHealth": false } } } ] }'
-done
-
-
-```
 Completing the AWS installation on user-provisioned infrastructure:
 ```bash
 openshift-install-$version wait-for install-complete --dir $dir --log-level debug
