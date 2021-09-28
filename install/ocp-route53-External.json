@@ -24,10 +24,6 @@
     "ParameterValue": "VpcId_Value" 
   },
   {
-    "ParameterKey": "HostedZoneId", 
-    "ParameterValue": "HostedZoneId_Value" 
-  },
-  {
     "ParameterKey": "HostedZoneName", 
     "ParameterValue": "HostedZoneName_Value" 
   }
