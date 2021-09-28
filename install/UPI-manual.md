@@ -278,7 +278,7 @@ Creating the control plane machines in AWS:
 * [ocp-master-Internal.json](ocp-master-Internal.json)
 * [ocp-master-Internal.yaml](ocp-master-Internal.yaml)
 ```BASH
-export AutoRegisterDNS=yes
+export AutoRegisterDNS=no
 export PrivateHostedZoneName=$ClusterName.$DomainName
 export Master0Subnet=$( echo $PrivateSubnets | cut --delimiter , --field 1 )
 export Master1Subnet=$( echo $PrivateSubnets | cut --delimiter , --field 2 )
