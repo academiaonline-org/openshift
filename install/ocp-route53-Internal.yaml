@@ -18,9 +18,6 @@ Parameters:
     ConstraintDescription: Infrastructure name must be alphanumeric, start with a letter, and have a maximum of 27 characters.
     Description: A short, unique cluster ID used to tag cloud resources and identify items owned or used by the cluster.
     Type: String
-  HostedZoneId:
-    Description: The Route53 public zone ID to register the targets with, such as Z21IXYZABCZ2A4.
-    Type: String
   HostedZoneName:
     Description: The Route53 zone to register the targets with, such as example.com. Omit the trailing period.
     Type: String
@@ -48,7 +45,6 @@ Metadata:
     - Label:
         default: "DNS"
       Parameters:
-      - HostedZoneId
       - HostedZoneName
     ParameterLabels:
       ClusterName:
@@ -59,8 +55,6 @@ Metadata:
         default: "VPC ID"
       PrivateSubnets:
         default: "Private Subnets"
-      HostedZoneId:
-        default: "Public Hosted Zone ID"
       HostedZoneName:
         default: "Public Hosted Zone Name"
 
@@ -75,46 +69,6 @@ Resources:
       IpAddressType: ipv4
       Subnets: !Ref PrivateSubnets
       Type: network
-
-  IntDns:
-    Type: "AWS::Route53::HostedZone"
-    Properties:
-      HostedZoneConfig:
-        Comment: "Managed by CloudFormation"
-      Name: !Join [".", [!Ref ClusterName, !Ref HostedZoneName]]
-      HostedZoneTags:
-      - Key: Name
-        Value: !Join ["-", [!Ref InfrastructureName, "int"]]
-      - Key: !Join ["", ["kubernetes.io/cluster/", !Ref InfrastructureName]]
-        Value: "owned"
-      VPCs:
-      - VPCId: !Ref VpcId
-        VPCRegion: !Ref "AWS::Region"
-
-  InternalApiServerRecord:
-    Type: AWS::Route53::RecordSetGroup
-    Properties:
-      Comment: Alias record for the API server
-      HostedZoneId: !Ref IntDns
-      RecordSets:
-      - Name:
-          !Join [
-            ".",
-            ["api", !Ref ClusterName, !Join ["", [!Ref HostedZoneName, "."]]],
-          ]
-        Type: A
-        AliasTarget:
-          HostedZoneId: !GetAtt IntApiElb.CanonicalHostedZoneID
-          DNSName: !GetAtt IntApiElb.DNSName
-      - Name:
-          !Join [
-            ".",
-            ["api-int", !Ref ClusterName, !Join ["", [!Ref HostedZoneName, "."]]],
-          ]
-        Type: A
-        AliasTarget:
-          HostedZoneId: !GetAtt IntApiElb.CanonicalHostedZoneID
-          DNSName: !GetAtt IntApiElb.DNSName
 
   InternalApiListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -288,9 +242,6 @@ Resources:
       Subnets: !Ref PrivateSubnets
 
 Outputs:
-  PrivateHostedZoneId:
-    Description: Hosted zone ID for the private DNS, which is required for private records.
-    Value: !Ref IntDns
   InternalApiLoadBalancerName:
     Description: Full name of the internal API load balancer.
     Value: !GetAtt IntApiElb.LoadBalancerFullName
